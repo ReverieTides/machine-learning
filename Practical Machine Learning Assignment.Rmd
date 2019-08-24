@@ -1,0 +1,86 @@
+---
+title: "Practical Machine Learning"
+author: "DC"
+date: "24/08/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libs}
+library(scales)
+library(caret)
+
+```
+
+### Overview  
+The goal of this exercise is to perform some machine learning techniques on a test and training data set which will in turn create a model used to predict the manner of which a set of subjects performed an exercise.  
+
+
+```{r data import}
+set.seed(1)
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na.strings = c(NA, "#DIV/0!", ""))
+testing <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na.strings = c(NA, "#DIV/0!", ""))
+```
+
+### First Steps: Data cleaning  
+The first thing I will do is explore the obtained data. Ideally to find and useful or redundant aspects with in.  
+After reviewing the dataset we can see that there are several misc entries in the data, such as "#DIV/0" and blank fields. I have reloaded the data, using these aforementioned strings as NA strings.  
+From here we can see that there are several columns which entirely consist of NA values. 
+We can also see that there are some variables which have mostly NA values too. It makes sense to remove
+these variables if the majority of the column has NA's as they won't be very useful for calculating predictors.
+Finally, I will make the following statement and change:
+  
+> If a column contains more then 95% of it's observations as NA's then remove that column.
+  
+
+```{r clean}
+cleanedTraining <- training[, !apply(training, 2, function(x) sum(is.na(x)) >= nrow(training) * 0.95)]
+cleanedTesting <- testing[, !apply(testing, 2, function(x) sum(is.na(x)) >= nrow(testing) * 0.95)]
+
+```  
+Using r's `complete.cases` function we can see that we have `r table(complete.cases(cleanedTraining))[[1]]` remaining rows of data with `r ncol(cleanedTraining)` columns of full data.  
+
+Next we will create training and test set using a 70/30 split and set a training control for cross validation.  
+```{r sets}
+train_index <- createDataPartition(cleanedTraining$classe, p = 0.7, list = F)
+
+finalTrain <- cleanedTraining[train_index, ]
+finalTest <- cleanedTraining[-train_index, ]
+
+control <- trainControl(method = "cv", number = 3)
+
+```
+  
+In terms of exploratory analysis, there are too many variables for a concise report such as this. However after looking through the data and performing personal exploration I feel that first 5 varaibles will add little to no value when building a sufficient model as they are used for identification of subjects and timings.  
+
+```{r rm}
+finalTrain <- finalTrain[, c(-1:-5)]
+finalTest <- finalTest[, c(-1:-5)]
+
+
+```
+
+### The Model  
+Since this task can be defined as a typical classification I will test two techniques, rpart and randomforest.  
+  
+#### rpart
+```{r rpart}
+rpart_model <- train(classe ~ ., data = finalTrain, method = "rpart", trControl = control)
+rpart_predictions <- predict(rpart_model, finalTest)
+confusionMatrix(finalTest$classe, rpart_predictions)
+```
+We can see that using rpart we only achieve `r round(confusionMatrix(finalTest$classe, rpart_predictions)[[3]][[1]], 3) * 100`%
+accuracy. 
+
+#### Random Forest  
+```{r rf}
+rf_model <- train(classe ~ ., data = finalTrain, method = "rf", trControl = control)
+rf_predictions <- predict(rf_model, finalTest)
+confusionMatrix(finalTest$classe, rf_predictions)
+```
+Remarkably, we can see that using randomforests we manage to achieve `r round(confusionMatrix(finalTest$classe, rf_predictions)[[3]][[1]],3) * 100`%
+accuracy. This is the model I will be taking forward to the final quiz of this module. 
+
